@@ -129,6 +129,22 @@ def open_proc_bodies(filename):
             par = line[1:]
             bodies.append((bid, par))
     return bodies
+    
+ 
+def open_proc_bodies_dict(filename):
+    bid2pars = {}
+    
+    with open(filename) as f:
+        for line in f:
+            line = line.strip().split()
+            bid = int(line[0])
+            par = line[1:]
+            
+            if bid in bid2pars:
+                bid2pars[bid].append(par)
+            else:
+                bid2pars[bid] = []
+    return bid2pars
 
     
 def open_proc_claims(filename):
@@ -207,13 +223,15 @@ def open_wordvecs(filename):
     return w2v
 
         
-def make_id_dicts(word2vec_dict):
-    w2i, i2w, i2v, i = {}, {}, {}, 0
+def make_id_dicts(k2v_dict):
+    k2i, i2k, i2v, i = {}, {}, {}, 0
     
-    for k, v in word2vec_dict.items():
-        w2i[k] = i
-        i2w[i] = k
+    for k, v in k2v_dict.items():
+        k2i[k] = i
+        i2k[i] = k
         i2v[i] = v
         i += 1
-    return w2i, i2w, i2v
+    return k2i, i2k, i2v
     
+
+   
