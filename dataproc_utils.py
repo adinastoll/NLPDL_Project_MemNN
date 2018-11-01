@@ -88,7 +88,7 @@ def trim_bodies(body_pars, keep_count=9, keep_length=None):
     return trimmed_pars
 
 
-def trim_claims(claims, keep_length=10):
+def trim_claims(claims, keep_length=12):
     trimmed_claims = []
     
     for c in claims:
@@ -120,49 +120,103 @@ def save_proc_claims(filename, claims, labels):
         f.write(txt_file)
         
         
-def open_proc_bodies(filename):
+def parse_proc_bodies(all_bodies):
     bodies = []
-    with open(filename) as f:
-        for line in f:
-            line = line.strip().split()
-            bid = int(line[0])
-            par = line[1:]
-            bodies.append((bid, par))
+
+    for line in all_bodies:
+        line = line.strip().split()
+        bid = int(line[0])
+        par = line[1:]
+        bodies.append((bid, par))
     return bodies
     
  
-def open_proc_bodies_dict(filename):
+def parse_proc_bodies_dict(all_bodies):
     bid2pars = {}
-    
-    with open(filename) as f:
-        for line in f:
-            line = line.strip().split()
-            bid = int(line[0])
-            par = line[1:]
-            
-            if bid in bid2pars:
-                bid2pars[bid].append(par)
-            else:
-                bid2pars[bid] = []
+
+    for line in all_bodies:
+        line = line.strip().split()
+        bid = int(line[0])
+        par = line[1:]
+
+        if bid in bid2pars:
+            bid2pars[bid].append(par)
+        else:
+            bid2pars[bid] = []
     return bid2pars
 
     
-def open_proc_claims(filename):
+def parse_proc_claims(all_claims):
     claims = []
     labels = []
-    
-    with open(filename) as f:
-        for line in f:
-            line = line.strip().split()
-            bid = int(line[0])
-            claim = line[1:-1]
-            label = int(line[-1])
-            claims.append((bid, claim))
-            labels.append(label)
+
+    for line in all_claims:
+        line = line.strip().split()
+        bid = int(line[0])
+        claim = line[1:-1]
+        label = int(line[-1])
+        claims.append((bid, claim))
+        labels.append(label)
             
     return claims, labels
-    
-    
+
+
+def load_file(filename):
+    with open(filename) as f:
+        lines = f.readlines()
+
+    return lines
+
+
+def load_proc_data(bodies_filename, claims_filename):
+    all_bodies = load_file(bodies_filename)
+    all_claims = load_file(claims_filename)
+
+    b2p = parse_proc_bodies_dict(all_bodies)
+
+    data = []
+    for line in all_claims:
+        line = line.strip().split()
+        bid = int(line[0])
+        claim = line[1:-1]
+        label = int(line[-1])
+
+        if bid in b2p:
+            data.append((b2p[bid], claim, label))
+
+    return data
+
+
+def make_word_freq_V(data, fmin=None):
+    V = {'<unknown>': 0}
+
+    for b, c, _ in data:
+        for par in b:
+            for word in par:
+                V[word] = V.get(word, 0) + 1
+
+        for word in c:
+            V[word] = V.get(word, 0) + 1
+
+    if fmin:
+        most_freq_V = {'<unknown>': 0}
+
+        for word, count in V.items():
+            if count < fmin:
+                most_freq_V['<unknown>'] += 1
+            else:
+                most_freq_V[word] = count
+
+        V = most_freq_V
+
+    return V
+
+
+def word2idx(vocab):
+    word_idx = {c: i+1 for i, c in enumerate(vocab)}
+    return word_idx
+
+
 def make_V(body_pars, claims):
     V = {}
     for par in body_pars:
@@ -214,7 +268,7 @@ def write_wordvecs_tofile(filename, vec_dict):
         f.write(txt_file)
 
         
-def open_wordvecs(filename):
+def load_wordvecs(filename):
     w2v = {}
     with open(filename) as f:
         for line in f:
@@ -232,6 +286,42 @@ def make_id_dicts(k2v_dict):
         i2v[i] = v
         i += 1
     return k2i, i2k, i2v
-    
 
-   
+
+def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12):
+    nclaims = len(data)
+
+    d = np.zeros((nclaims, max_par_num, max_par_len), dtype=np.int32)
+    s = np.zeros((nclaims, max_claim_len), dtype=np.int32)
+
+    for i in range(nclaims):
+        max_npars = max_par_num
+        max_claim_length = max_claim_len
+
+        body, claim, _ = data[i]
+        npars = len(body)
+
+        if npars < max_npars:
+            npars, max_npars = max_npars, npars
+
+        for j in range(max_npars):
+            max_par_length = max_par_len
+            par = body[j]
+            par_len = len(par)
+
+            if par_len < max_par_length:
+                par_len, max_par_length = max_par_length, par_len
+
+            for k in range(max_par_length):
+                pword = par[k]
+                d[i, j, k] = w2i[pword]
+
+        claim_len = len(claim)
+        if claim_len < max_claim_length:
+            claim_len, max_claim_length = max_claim_length, claim_len
+
+        for m in range(max_claim_length):
+            cword = claim[m]
+            s[i, m] = w2i[cword]
+
+    return d, s
