@@ -325,3 +325,14 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12)
             s[i, m] = w2i[cword]
 
     return d, s
+
+
+def label2onehot(labels):
+    n = len(labels)
+    onehot_labels = np.zeros((n, 4), dtype=np.int32)
+
+    for i in range(n):
+        label = labels[i]
+        onehot_labels[i, label] = 1
+
+    return onehot_labels
