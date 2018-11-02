@@ -288,7 +288,7 @@ def make_id_dicts(k2v_dict):
     return k2i, i2k, i2v
 
 
-def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12):
+def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=30):
     nclaims = len(data)
 
     d = np.zeros((nclaims, max_par_num, max_par_len), dtype=np.int32)
@@ -314,7 +314,11 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12)
 
             for k in range(max_par_length):
                 pword = par[k]
-                d[i, j, k] = w2i[pword]
+
+                if pword in w2i:
+                    d[i, j, k] = w2i[pword]
+                else:
+                    d[i, j, k] = w2i['<unknown>']
 
         claim_len = len(claim)
         if claim_len < max_claim_length:
@@ -322,7 +326,11 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12)
 
         for m in range(max_claim_length):
             cword = claim[m]
-            s[i, m] = w2i[cword]
+
+            if cword in w2i:
+                s[i, m] = w2i[cword]
+            else:
+                d[i, j, k] = w2i['<unknown>']
 
     return d, s
 
