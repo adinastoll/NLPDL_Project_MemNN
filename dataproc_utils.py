@@ -330,7 +330,7 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=30)
             if cword in w2i:
                 s[i, m] = w2i[cword]
             else:
-                d[i, j, k] = w2i['<unknown>']
+                s[i, m] = w2i['<unknown>']
 
     return d, s
 
