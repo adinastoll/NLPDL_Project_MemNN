@@ -3,6 +3,8 @@ import pandas as pd
 import nltk
 import re
 import string
+from imblearn.over_sampling import RandomOverSampler
+from imblearn.under_sampling import RandomUnderSampler
 
 
 def split_paraphs(df):
@@ -131,7 +133,7 @@ def parse_proc_bodies(all_bodies):
     return bodies
     
  
-def parse_proc_bodies_dict(all_bodies):
+def parse_proc_bodies_dict(all_bodies, split_pars=True):
     bid2pars = {}
 
     for line in all_bodies:
@@ -140,7 +142,10 @@ def parse_proc_bodies_dict(all_bodies):
         par = line[1:]
 
         if bid in bid2pars:
-            bid2pars[bid].append(par)
+            if split_pars:
+                bid2pars[bid].append(par)
+            else:
+                bid2pars[bid].extend(par)
         else:
             bid2pars[bid] = []
     return bid2pars
@@ -168,11 +173,11 @@ def load_file(filename):
     return lines
 
 
-def load_proc_data(bodies_filename, claims_filename):
+def load_proc_data(bodies_filename, claims_filename, split_pars=True):
     all_bodies = load_file(bodies_filename)
     all_claims = load_file(claims_filename)
 
-    b2p = parse_proc_bodies_dict(all_bodies)
+    b2p = parse_proc_bodies_dict(all_bodies, split_pars=split_pars)
 
     data = []
     for line in all_claims:
@@ -198,7 +203,7 @@ def make_word_freq_V(data, fmin=None):
         for word in c:
             V[word] = V.get(word, 0) + 1
 
-    if fmin:
+    if fmin is not None:
         most_freq_V = {'<unknown>': 0}
 
         for word, count in V.items():
@@ -212,8 +217,12 @@ def make_word_freq_V(data, fmin=None):
     return V
 
 
-def word2idx(vocab):
-    word_idx = {c: i+1 for i, c in enumerate(vocab)}
+def word2idx(vocab, pretrained=None):
+    if pretrained is None:
+        word_idx = {w: i+1 for i, w in enumerate(vocab)}
+    else:
+        word_idx = {w: i+1 for i, w in enumerate(vocab.keys() & pretrained.keys())}
+
     return word_idx
 
 
@@ -257,7 +266,7 @@ def extract_wordvecs(filename, V_dict):
             line = line.strip().split()
             word = line[0]
             if word in V_dict:
-                vec_dict[word] = line[1:]
+                vec_dict[word] = [float(x) for x in line[1:]]
     return vec_dict
     
     
@@ -273,7 +282,7 @@ def load_wordvecs(filename):
     with open(filename) as f:
         for line in f:
             line = line.strip().split()
-            w2v[line[0]] = line[1:]
+            w2v[line[0]] = [float(x) for x in line[1:]]
     return w2v
 
         
@@ -288,7 +297,7 @@ def make_id_dicts(k2v_dict):
     return k2i, i2k, i2v
 
 
-def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12):
+def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=30):
     nclaims = len(data)
 
     d = np.zeros((nclaims, max_par_num, max_par_len), dtype=np.int32)
@@ -314,7 +323,11 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12)
 
             for k in range(max_par_length):
                 pword = par[k]
-                d[i, j, k] = w2i[pword]
+
+                if pword in w2i:
+                    d[i, j, k] = w2i[pword]
+                else:
+                    d[i, j, k] = w2i['<unknown>']
 
         claim_len = len(claim)
         if claim_len < max_claim_length:
@@ -322,9 +335,53 @@ def vocab_vectorizer(data, w2i, max_par_num=9, max_par_len=30, max_claim_len=12)
 
         for m in range(max_claim_length):
             cword = claim[m]
-            s[i, m] = w2i[cword]
+
+            if cword in w2i:
+                s[i, m] = w2i[cword]
+            else:
+                s[i, m] = w2i['<unknown>']
 
     return d, s
+
+
+def word_vectorizer(data, w2i, max_body_len=30, max_claim_len=12):
+    nclaims = len(data)
+
+    d = np.zeros((nclaims, max_body_len), dtype=np.int32)
+    s = np.zeros((nclaims, max_claim_len), dtype=np.int32)
+
+    for i in range(nclaims):
+        body_len = max_body_len
+        claim_len = max_claim_len
+
+        body, claim, _ = data[i]
+        nwords_body = len(body)
+
+        if nwords_body < body_len:
+            nwords_body, body_len = body_len, nwords_body
+
+        for j in range(body_len):
+            pword = body[j]
+
+            if pword in w2i:
+                d[i, j] = w2i[pword]
+            else:
+                d[i, j] = w2i['<unknown>']
+
+        nwords_claim = len(claim)
+        if nwords_claim < claim_len:
+            nwords_claim, claim_len = claim_len, nwords_claim
+
+        for k in range(claim_len):
+            cword = claim[k]
+
+            if cword in w2i:
+                s[i, k] = w2i[cword]
+            else:
+                s[i, k] = w2i['<unknown>']
+
+    return d, s
+
 
 
 def label2onehot(labels):
@@ -336,3 +393,35 @@ def label2onehot(labels):
         onehot_labels[i, label] = 1
 
     return onehot_labels
+
+
+def random_sampler(X_body, X_claim, y, type='under', random_state=42):
+
+    if type == 'under':
+        rs = RandomUnderSampler(random_state=random_state)
+    elif type == 'over':
+        rs = RandomOverSampler(random_state=random_state)
+    else:
+        raise ValueError('Incorrect sampler type.')
+
+    body_shape = X_body.shape
+    if len(body_shape) > 2:
+        n, m, s = body_shape
+        X_body = X_body.reshape((n, -1))
+
+        X = np.hstack((X_body, X_claim))
+        X_resampled, y_resampled = rs.fit_resample(X, y)
+
+        X_body_resampled = X_resampled[:, :(m * s)].reshape((n, m, -1))
+        X_claim_resampled = X_resampled[:, (m * s):]
+
+    else:
+        n, m = body_shape
+
+        X = np.hstack((X_body, X_claim))
+        X_resampled, y_resampled = rs.fit_resample(X, y)
+
+        X_body_resampled = X_resampled[:, :m]
+        X_claim_resampled = X_resampled[:, m:]
+
+    return X_body_resampled, X_claim_resampled, y_resampled
