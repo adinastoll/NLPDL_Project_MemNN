@@ -37,7 +37,7 @@ train_data, val_data, train_labels, val_labels = train_test_split(data, y, test_
 word2freq = make_word_freq_V(train_data)
 word2index = word2idx(word2freq)
 
-vocab_size = len(word2index)
+vocab_size = len(word2index) + 1
 print('Vocab size:', vocab_size, 'unique words in the train set')
 
 # vectorize input words (turn each word into its index from the word2index dict)
@@ -57,11 +57,9 @@ print("Training set shape: labels", train_labels.shape)
 # data size params
 n_train = train_body.shape[0]
 n_val = val_body.shape[0]
-n_test = test_body.shape[0]
 
 print("Training Size", n_train)
 print("Validation Size", n_val)
-print("Testing Size", n_test)
 
 
 # initialize placeholders
