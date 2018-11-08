@@ -57,11 +57,9 @@ print("Training set shape: labels", train_labels.shape)
 # data size params
 n_train = train_body.shape[0]
 n_val = val_body.shape[0]
-n_test = test_body.shape[0]
 
 print("Training Size", n_train)
 print("Validation Size", n_val)
-print("Testing Size", n_test)
 
 
 # initialize placeholders
