@@ -37,7 +37,7 @@ train_data, val_data, train_labels, val_labels = train_test_split(data, y, test_
 word2freq = make_word_freq_V(train_data)
 word2index = word2idx(word2freq)
 
-vocab_size = len(word2index)
+vocab_size = len(word2index) + 1
 print('Vocab size:', vocab_size, 'unique words in the train set')
 
 # vectorize input words (turn each word into its index from the word2index dict)
