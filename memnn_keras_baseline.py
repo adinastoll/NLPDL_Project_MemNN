@@ -15,14 +15,14 @@ test_size = 0.2
 random_state = 42
 batch_size = 64
 epochs = 25
-body_size = 20
+body_size = 20 
 claim_size = 12
 embedding_dim = 100
 output_size = 4  # size of the output vector
 
 
 # load data and labels
-data = load_proc_data('train_bodies.txt', 'train_claims.txt', split_pars=False)
+data = load_proc_data('processed_data\\train_bodies.txt', 'processed_data\\train_claims.txt', split_pars=False)
 labels = [label for body, claim, label in data]
 y = np.array(labels)
 
@@ -69,14 +69,12 @@ input_claim = Input((claim_size,))
 # encoders
 # embed the input sequence into a sequence of vectors
 body_encoder_m = Sequential()
-body_encoder_m.add(Embedding(input_dim=vocab_size,
-                              output_dim=embedding_dim))
+body_encoder_m.add(Embedding(input_dim=vocab_size, output_dim=embedding_dim))
 body_encoder_m.add(Dropout(0.3))  # output: (samples, body_size, embedding_dim)
 
 # embed the input into a sequence of vectors of size claim_size
 body_encoder_c = Sequential()
-body_encoder_c.add(Embedding(input_dim=vocab_size,
-                             output_dim=claim_size))
+body_encoder_c.add(Embedding(input_dim=vocab_size, output_dim=claim_size))
 body_encoder_c.add(Dropout(0.3))  # output: (samples, body_size, claim_size)
 
 # embed the claim into a sequence of vectors
@@ -124,6 +122,12 @@ model.fit([train_body, train_claim], train_labels,
           batch_size=batch_size,
           epochs=epochs,
           validation_data=([val_body, val_claim], val_labels))
+          
+# model.fit([train_body, train_claim], train_labels,
+#           batch_size=batch_size,
+#           epochs=epochs)
+#
+# model.predict([val_body, val_claim], batch_size=batch_size)
 
 # print model summary
 print(model.summary())

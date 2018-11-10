@@ -28,7 +28,7 @@ w2v = load_wordvecs('twitter_glo_vecs\\wordvecs25d.txt')
 print(len(w2v), 'pretrained embeddings')
 
 # load data and labels
-data = load_proc_data('train_bodies.txt', 'train_claims.txt', split_pars=True)
+data = load_proc_data('processed_data\\train_bodies.txt', 'processed_data\\train_claims.txt', split_pars=True)
 labels = [label for body, claim, label in data]
 y = np.array(labels)
 

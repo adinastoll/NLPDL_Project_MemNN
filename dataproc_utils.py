@@ -6,9 +6,6 @@ import string
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
 
 def split_paraphs(df):
     paragraphs = []
@@ -136,7 +133,7 @@ def parse_proc_bodies(all_bodies):
     return bodies
     
  
-def parse_proc_bodies_dict(all_bodies, split_pars=True):
+def parse_proc_bodies_dict(all_bodies, split_pars=True, tokenize=True):
     bid2pars = {}
 
     for line in all_bodies:
@@ -144,13 +141,19 @@ def parse_proc_bodies_dict(all_bodies, split_pars=True):
         bid = int(line[0])
         par = line[1:]
 
+        if tokenize is False:
+            par = ' '.join(par)
+
         if bid in bid2pars:
             if split_pars:
                 bid2pars[bid].append(par)
             else:
                 bid2pars[bid].extend(par)
         else:
-            bid2pars[bid] = []
+            if split_pars:
+                bid2pars[bid] = [par]
+            else:
+                bid2pars[bid] = par
     return bid2pars
 
     
@@ -428,35 +431,4 @@ def random_sampler(X_body, X_claim, y, type='under', random_state=42):
         X_claim_resampled = X_resampled[:, m:]
 
     return X_body_resampled, X_claim_resampled, y_resampled
-
-
-def make_p_tfidf(data, w2freq, n_pars=9, filename=None):
-    n = len(data)
-
-    joined_claims = []
-    for p, c, _ in data:
-        joined_claims.append(' '.join(c))
-
-    tf_vec = TfidfVectorizer(binary=True, ngram_range=(1, 1), stop_words=None, strip_accents=None, tokenizer=str.split,
-                             lowercase=False, vocabulary=set(w2freq.keys()))
-
-    claim_tfidf = tf_vec.fit_transform(joined_claims)
-
-    p_tfidf = np.zeros((n, n_pars))
-
-    for i in range(n):
-        body = data[i][0]
-        joined_body = [''] * n_pars
-        for p in range(len(body)):
-            joined_body[p] = ' '.join(body[p])
-
-        b_tfidf = tf_vec.fit_transform(joined_body)
-        c_tfidf = claim_tfidf[i]
-        cs = cosine_similarity(b_tfidf, c_tfidf)
-        p_tfidf[i] = cs.T
-
-    if filename is not None:
-        np.savetxt(filename, p_tfidf, delimiter=' ')
-
-    return  p_tfidf
 
