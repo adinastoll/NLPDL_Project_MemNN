@@ -60,9 +60,9 @@ val_body, val_claim = vocab_vectorizer(val_data, word2index, max_par_len=body_si
 # tfidf_claim shape (len(claims), vocab size)
 # p_tfidf output shape: (len(claims), n_pars)
 
-# load pre-computed p_tfidf similarity matrix
-p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
-print('Shape of similarity matrix p_tfidf:', p_tfidf.shape)
+# load pre-computed p_tfidf similarity matrix for train data
+train_p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
+print('Shape of similarity matrix train p_tfidf:', train_p_tfidf.shape)
 
 
 # prepare embedding matrix
