@@ -31,6 +31,7 @@ print(len(w2v), 'pretrained embeddings')
 # load data and labels
 data = load_proc_data('processed_data\\train_bodies.txt', 'processed_data\\train_claims.txt', split_pars=True)
 labels = [label for body, claim, label in data]
+data = [(body, claim) for body, claim, label in data]
 y = np.array(labels)
 
 
@@ -172,10 +173,10 @@ model.compile(optimizer='rmsprop',
 
 
 # train
-model.fit([train_body, train_p_tfidf], train_labels,
+model.fit([train_body, train_claim, train_p_tfidf], train_labels,
           batch_size=batch_size,
           epochs=epochs,
-          validation_data=([val_body, val_p_tfidf], val_labels))
+          validation_data=([val_body, val_claim, val_p_tfidf], val_labels))
 
 # print model summary
 print(model.summary())
