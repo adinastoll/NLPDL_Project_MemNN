@@ -4,7 +4,7 @@ from keras.models import Sequential, Model
 from keras.layers.embeddings import Embedding
 from keras.layers import Input, Activation, Dense, Permute, Reshape, Dropout
 from keras.layers import add, dot, multiply, concatenate
-from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda, MaxPooling1D
+from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda, MaxPooling1D, GlobalMaxPooling1D
 from keras.initializers import Constant
 from keras import backend as K
 import numpy as np
@@ -48,15 +48,15 @@ y = np.array(labels)
 
 # load pre-computed p_tfidf similarity matrix for train data
 p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
-p_tfidf = np.reshape(p_tfidf, (-1, n_pars, 1))
+#p_tfidf = np.reshape(p_tfidf, (-1, n_pars, 1))
 print('Shape of similarity matrix train p_tfidf:', p_tfidf.shape)
 
 # train/validation split
 train_data, val_data, train_p_tfidf, val_p_tfidf, train_labels, val_labels = train_test_split(data, p_tfidf, y,
                                                                                               test_size=.2,
                                                                                               random_state=random_state)
-print('First input tuple (body, claim, stance):\n', train_data[0])
-print('First input p_tfidf:\n', train_p_tfidf[0])
+#print('First input tuple (body, claim, stance):\n', train_data[0])
+#print('First input p_tfidf:\n', train_p_tfidf[0])
 
 
 # create a vocabulary dict from train data
@@ -99,20 +99,21 @@ input_claim = Input(shape=(claim_size,), dtype='int32')
 # input_p_tfidf = Input(tensor=const_p_tfidf)
 input_p_tfidf = Input(shape=(n_pars,), dtype='float32')
 
-print(input_body.shape)     # (?, 9, 15)
-print(input_claim.shape)    # (?, 15)
-print(input_p_tfidf.shape)  # (39977, 9)
+print('input body', input_body.shape)     # (?, 9, 15)
+print('input claim', input_claim.shape)    # (?, 15)
+print('input p_tfidf', input_p_tfidf.shape)  # (39977, 9)
 
 embedded_body = embedding_body(input_body)
 embedded_claim = embedding_claim(input_claim)
 
-print(embedded_body.shape)   # (?, 9, 15, 25)
-print(embedded_claim.shape)  # (?, 15, 25)
+print('embedded body', embedded_body.shape)   # (?, 9, 15, 25)
+print('embedded claim', embedded_claim.shape)  # (?, 15, 25)
 
 # train two 1D convnets with maxpooling (should be time distributed with maxout layer (??))
 cnn_body = TimeDistributed(Conv1D(100, 5, padding='same', activation='relu'))(embedded_body)
-#cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=5))(cnn_body) ## ???
+#cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=5, axis=-1))(cnn_body) ## ???
 #cnn_body = TimeDistributed(MaxPooling1D(5, padding='same'))(cnn_body)  ## should be maxout
+# what is the output of the maxout layer???
 
 cnn_claim = Conv1D(100, 5, padding='same', activation='relu')(embedded_claim)
 # cnn_claim = MaxPooling1D(5, padding='same')(cnn_claim)
@@ -126,10 +127,10 @@ print('cnn_claim shape', cnn_claim.shape)  # (?, 3, 100)
 lstm_body = TimeDistributed(LSTM(100))(embedded_body)
 lstm_claim = (LSTM(100))(embedded_claim)
 
-print(lstm_body.shape) # (?, 9, 100)
-print(lstm_claim.shape) # (?, 100)
+print('lstm body', lstm_body.shape) # (?, 9, 100)
+print('lstm claim', lstm_claim.shape) # (?, 100)
 
-lstm_body = multiply([lstm_body, input_p_tfidf])  # (multiply??)
+lstm_body = multiply([lstm_body, tf.expand_dims(input_p_tfidf, 2)])  # (multiply??)
 ### tensor shapes: (len(claims/bodies), n_pars (9), 100) * (len(claims/bodies), n_pars, 1)
 print('lstm_body * p_tfidf', lstm_body.shape)  # (39977, 9, 100)
 print('lstm_claim', lstm_claim.shape)
@@ -140,31 +141,40 @@ p_lstm = dot([lstm_body, lstm_claim], axes=(2, 1), normalize=True)
 p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
 #p_lstm = Reshape((n_pars, 1))(p_lstm)   # shape: (samples, n_pars, 1)
 
-print('p_lstm', p_lstm.shape)  # (39977, 9)
+print('p_lstm', p_lstm.shape)  # (samples, 9)
 
 ### cnn_body = cnn_body * p_lstm (multiply??)
-cnn_body = multiply([cnn_body, p_lstm])  # (multiply??)
-#cnn_body = Reshape((n_pars, 3, 100))(cnn_body)
+cnn_body = Reshape((n_pars, body_size*100))(cnn_body)
+cnn_body = multiply([cnn_body, tf.expand_dims(p_lstm, 2)])  # (multiply??)
+cnn_body = Reshape((n_pars, body_size, 100))(cnn_body)
 #cnn_claim = Reshape((300,))(cnn_claim)
-print('cnn_body', cnn_body.shape)
+print('cnn_body * p_lstm', cnn_body.shape)
 print('cnn_claim', cnn_claim.shape)
 
 ## p_cnn = cnn_claim.T x M' x cnn_body[j]  a.k.a. wtf is M'?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
-p_cnn = dot([cnn_body, cnn_claim], axes=(2, 1), normalize=True)
+p_cnn = dot([cnn_body, cnn_claim], axes=(3, 2), normalize=True)
 p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, body_size, claim_size)
 print('p_cnn', p_cnn.shape)
 
+
+## o = [mean(cnn_body); [max(p_cnn); mean(p_cnn)]; [max(p_lstm); mean(p_lstm)]; [max(p_tfidf); mean(p_tfidf)]]
 mean_cnn_body = K.mean(cnn_body, axis=2)
 print('mean cnn body', mean_cnn_body.shape)
 
-## o = [mean(cnn_body); [max(p_cnn); mean(p_cnn)]; [max(p_lstm); mean(p_lstm)]; [max(p_tfidf); mean(p_tfidf)]]
-output = [ K.mean(cnn_body, axis=2),
-          [K.max(p_cnn, axis=1), K.mean(p_cnn, axis=1)],
-          [K.max(p_lstm, axis=1), K.mean(p_lstm, axis=1)],
-          [K.max(input_p_tfidf, axis=1), K.mean(input_p_tfidf, axis=1)] ] # ???
+max_p_cnn = K.max(p_cnn, axis=1)
+mean_p_cnn = K.mean(p_cnn, axis=1)
+max_p_lstm = K.max(p_lstm, axis=1)
+mean_p_lstm = K.mean(p_lstm, axis=1)
+max_p_tfidf = K.max(input_p_tfidf, axis=1)
+mean_p_tfidf = K.mean(input_p_tfidf, axis=1)
 
-print('output', output.shape)
+output = [ mean_cnn_body,
+          [max_p_cnn, mean_p_cnn],
+          [max_p_lstm, mean_p_lstm],
+          [max_p_tfidf, mean_p_tfidf] ]# ???
+
+#print('output', output.shape)
 
 response = concatenate([output, lstm_claim, cnn_claim])
 print('response layer:', response.shape)
