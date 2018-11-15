@@ -14,21 +14,18 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import tensorflow as tf
 
-def maxout(X, n_units):
-    return tf.contrib.layers.maxout(X, num_units=n_units)
 
-np.set_printoptions(edgeitems=10)
 
 batch_size = 64
 epochs = 25
 random_state = 42
 n_pars = 9 # max number of paragraphs from each document
-body_size = 15  # max paragraph length (num of words in each paragraph)
+par_size = 15  # max paragraph length (num of words in each paragraph)
 claim_size = 15  # max num of words in each claim
-embedding_dim = 25
-output_size = 4  # size of the output vector
+embedding_dim = 25  # should be 100
+output_size = 4  # size of the output vector, corresponds to the number of classes
 
-# open saved wordvecs from file and make id dicts
+# open saved wordvecs from file
 w2v = load_wordvecs('twitter_glo_vecs\\wordvecs25d.txt')
 print(len(w2v), 'pretrained embeddings')
 
@@ -40,7 +37,7 @@ y = np.array(labels)
 
 # initialize tfidf tokenizer
 # fit on concatenated list of bodies and claims
-# transform bodies/pars and claims separately
+# and transform bodies/pars and claims at the same time
 # measure cosine similarity btw tfidf representations of bodies & claims to compute p_tfidf (claim-evidence sim vector)
 # tfidf_body shape (len(claims), n_pars, vocab size)
 # tfidf_claim shape (len(claims), vocab size)
@@ -48,7 +45,6 @@ y = np.array(labels)
 
 # load pre-computed p_tfidf similarity matrix for train data
 p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
-#p_tfidf = np.reshape(p_tfidf, (-1, n_pars, 1))
 print('Shape of similarity matrix train p_tfidf:', p_tfidf.shape)
 
 # train/validation split
@@ -59,18 +55,16 @@ train_data, val_data, train_p_tfidf, val_p_tfidf, train_labels, val_labels = tra
 #print('First input p_tfidf:\n', train_p_tfidf[0])
 
 
-# create a vocabulary dict from train data
+# create a vocabulary dict from train data (we exclude rare words, which appear only once)
 word2freq = make_word_freq_V(train_data, fmin=2)
 word2index = word2idx(word2freq, pretrained=w2v)
-
 vocab_size = len(word2index)
-print('Vocab size:', vocab_size, 'unique words in the train set')
+print('Vocab size:', vocab_size, 'unique words in the train set which have glove embeddings')
 
 # vectorize input words (turn each word into its index from the word2index dict)
 # for new words in test set that don't appear in train set, use index of <unknown>
-train_body, train_claim = vocab_vectorizer(train_data, word2index, max_par_len=body_size, max_claim_len=claim_size)
-val_body, val_claim = vocab_vectorizer(val_data, word2index, max_par_len=body_size, max_claim_len=claim_size)
-
+train_body, train_claim = vocab_vectorizer(train_data, word2index, max_par_len=par_size, max_claim_len=claim_size)
+val_body, val_claim = vocab_vectorizer(val_data, word2index, max_par_len=par_size, max_claim_len=claim_size)
 
 
 # prepare embedding matrix
@@ -83,7 +77,7 @@ for w, i in word2index.items():
 embedding_body = Embedding(vocab_size + 1,
                             embedding_dim,
                             embeddings_initializer=Constant(embedding_matrix),
-                            input_length=(n_pars, body_size,),
+                            input_length=(n_pars, par_size,),
                             trainable=False)
 
 embedding_claim = Embedding(vocab_size + 1,
@@ -92,14 +86,14 @@ embedding_claim = Embedding(vocab_size + 1,
                             input_length=claim_size,
                             trainable=False)
 
-# initialize placeholders and embed pre-trained word vectors
-input_body = Input(shape=(n_pars, body_size,), dtype='int32')  # change input shape
+# initialize input placeholders and embed pre-trained word vectors
+input_body = Input(shape=(n_pars, par_size,), dtype='int32')
 input_claim = Input(shape=(claim_size,), dtype='int32')
 input_p_tfidf = Input(shape=(n_pars,), dtype='float32')
 
 print('input body', input_body.shape)     # (?, 9, 15)
 print('input claim', input_claim.shape)    # (?, 15)
-print('input p_tfidf', input_p_tfidf.shape)  # (39977, 9)
+print('input p_tfidf', input_p_tfidf.shape)  # (?, 9)
 
 embedded_body = embedding_body(input_body)
 embedded_claim = embedding_claim(input_claim)
@@ -107,16 +101,18 @@ embedded_claim = embedding_claim(input_claim)
 print('embedded body', embedded_body.shape)   # (?, 9, 15, 25)
 print('embedded claim', embedded_claim.shape)  # (?, 15, 25)
 
-# train two 1D convnets (should be time distributed with maxout layer (??))
+# train two 1D convnets (should be time distributed with maxout layer)
 cnn_body = TimeDistributed(Conv1D(100, 5, padding='valid', activation='relu'))(embedded_body)
 cnn_body = Lambda(lambda x: K.max(x, axis=-1, keepdims=False))(cnn_body)  # this should be maxout
 #cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_body) ## does not work for some reason!!?
-# what is the output of the maxout layer???
 
 cnn_claim = Conv1D(100, 5, padding='valid', activation='relu')(embedded_claim)
 cnn_claim = Lambda(lambda x: K.max(x, axis=-1, keepdims=False))(cnn_claim)  # this should be maxout
 #cnn_claim = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_claim) ## does not work
 
+# maxout eliminates the last dimension from the cnn representations:
+# converts cnn_body with shape (?, 9, 11, 100) to (?, 9, 11)
+# and cnn_claim with shape (?, 11, 100) to (?, 11)
 print('cnn_body shape', cnn_body.shape)  # (?, 9, 11)
 print('cnn_claim shape', cnn_claim.shape)  # (?, 11)
 
@@ -128,40 +124,35 @@ lstm_claim = (LSTM(100))(embedded_claim)
 print('lstm body', lstm_body.shape) # (?, 9, 100)
 print('lstm claim', lstm_claim.shape) # (?, 100)
 
-
 # reshape tfidf sim matrix layer from (?, 9) into (?, 9, 1)
 reshaped_p_tfidf = Reshape((n_pars, 1))(input_p_tfidf)
 lstm_body = multiply([lstm_body, reshaped_p_tfidf])
-
 ### tensor shapes: (samples, n_pars, 100) * (samples, n_pars, 1) => (?, 9, 100)
-print('lstm_body * p_tfidf', lstm_body.shape)  # (samples, 9, 100)
-print('lstm_claim', lstm_claim.shape)  # (samples, 100)
+print('lstm_body * p_tfidf', lstm_body.shape)  # (?, 9, 100)
+print('lstm_claim', lstm_claim.shape)  # (?, 100)
 
 ## p_lstm = lstm_claim.T x M x lstm_body[j]  a.k.a. wtf is M?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_lstm = dot([lstm_body, lstm_claim], axes=(2, 1), normalize=True)
-#p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
-
 print('p_lstm', p_lstm.shape)  # (samples, 9)
 
-### cnn_body = cnn_body * p_lstm (multiply??)
+### cnn_body = cnn_body * p_lstm
 # reshape sim matrix layer from (?, 9) into (?, 9, 1)
 p_lstm = Reshape((n_pars, 1))(p_lstm)
-cnn_body = multiply([cnn_body, p_lstm])  # (multiply??)
-print('cnn_body * p_lstm', cnn_body.shape)
-print('cnn_claim', cnn_claim.shape)
+cnn_body = multiply([cnn_body, p_lstm])
+print('cnn_body * p_lstm', cnn_body.shape) # (?, 9, 11)
+print('cnn_claim', cnn_claim.shape)        # (?, 11)
 
 ## p_cnn = cnn_claim.T x M' x cnn_body[j]  a.k.a. wtf is M'?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_cnn = dot([cnn_body, cnn_claim], axes=(2, 1), normalize=True)
-#p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, n_pars)
-print('p_cnn', p_cnn.shape)
+print('p_cnn', p_cnn.shape)  # (?, 9)
 
 
 # no clue whats going from here onward
 ## o = [mean(cnn_body); [max(p_cnn); mean(p_cnn)]; [max(p_lstm); mean(p_lstm)]; [max(p_tfidf); mean(p_tfidf)]]
 mean_cnn_body = Lambda(lambda x: K.mean(x, axis=2))(cnn_body)
-print('mean cnn body', mean_cnn_body.shape)
+print('mean cnn body', mean_cnn_body.shape)  # (?, 9)
 
 # taking mean and max similarities
 max_p_cnn = Lambda(lambda x: K.max(x, axis=1))(p_cnn)
@@ -171,21 +162,23 @@ mean_p_lstm = Lambda(lambda x: K.mean(x, axis=1))(p_lstm)
 max_p_tfidf = Lambda(lambda x: K.max(x, axis=1))(reshaped_p_tfidf)
 mean_p_tfidf = Lambda(lambda x: K.mean(x, axis=1))(reshaped_p_tfidf)
 
-# reshaping some layers
+# reshape some layers to make their dimensions compatible
 max_p_cnn = Reshape((1,))(max_p_cnn)
 mean_p_cnn = Reshape((1,))(mean_p_cnn)
 
 output = concatenate([mean_cnn_body,
                       max_p_cnn, mean_p_cnn,
                       max_p_lstm, mean_p_lstm,
-                      max_p_tfidf, mean_p_tfidf]) # ???
+                      max_p_tfidf, mean_p_tfidf])
 
-print('output', output.shape)
+print('output', output.shape)  # (?, 15)
 
 response = concatenate([output, lstm_claim, cnn_claim])
-print('response layer:', response.shape)
+print('response layer:', response.shape)   # (?, 126)
 
-stance = Dense(128, activation='relu')(response)
+# home stretch
+stance = Dense(300, activation='relu')(response)
+stance = Dropout(0.3)(stance)
 preds = Dense(output_size, activation='softmax')(stance)
 
 
