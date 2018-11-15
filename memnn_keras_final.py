@@ -14,8 +14,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import tensorflow as tf
 
-# def maxout(X, n_units):
-    # return tf.contrib.layers.maxout(X, num_units=n_units)
+def maxout(X, n_units):
+    return tf.contrib.layers.maxout(X, num_units=n_units)
 
 np.set_printoptions(edgeitems=10)
 
@@ -107,14 +107,14 @@ embedded_claim = embedding_claim(input_claim)
 print('embedded body', embedded_body.shape)   # (?, 9, 15, 25)
 print('embedded claim', embedded_claim.shape)  # (?, 15, 25)
 
-# train two 1D convnets with maxpooling (should be time distributed with maxout layer (??))
+# train two 1D convnets (should be time distributed with maxout layer (??))
 cnn_body = TimeDistributed(Conv1D(100, 5, padding='valid', activation='relu'))(embedded_body)
-cnn_body = K.max(cnn_body, axis=-1, keepdims=False)  # this should be maxout
+cnn_body = Lambda(lambda x: K.max(x, axis=-1, keepdims=False))(cnn_body)  # this should be maxout
 #cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_body) ## does not work for some reason!!?
 # what is the output of the maxout layer???
 
 cnn_claim = Conv1D(100, 5, padding='valid', activation='relu')(embedded_claim)
-cnn_claim = K.max(cnn_claim, axis=-1, keepdims=False)  # this should be maxout
+cnn_claim = Lambda(lambda x: K.max(x, axis=-1, keepdims=False))(cnn_claim)  # this should be maxout
 #cnn_claim = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_claim) ## does not work
 
 print('cnn_body shape', cnn_body.shape)  # (?, 9, 11)
@@ -154,15 +154,15 @@ print('p_cnn', p_cnn.shape)
 
 # no clue whats going from here onward
 ## o = [mean(cnn_body); [max(p_cnn); mean(p_cnn)]; [max(p_lstm); mean(p_lstm)]; [max(p_tfidf); mean(p_tfidf)]]
-mean_cnn_body = K.mean(cnn_body, axis=2)
+mean_cnn_body = Lambda(lambda x: K.mean(x, axis=2))(cnn_body)
 print('mean cnn body', mean_cnn_body.shape)
 
-max_p_cnn = K.max(p_cnn, axis=1)
-mean_p_cnn = K.mean(p_cnn, axis=1)
-max_p_lstm = K.max(p_lstm, axis=1)
-mean_p_lstm = K.mean(p_lstm, axis=1)
-max_p_tfidf = K.max(input_p_tfidf, axis=1)
-mean_p_tfidf = K.mean(input_p_tfidf, axis=1)
+max_p_cnn = Lambda(lambda x: K.max(x, axis=1))(p_cnn)
+mean_p_cnn = Lambda(lambda x: K.mean(x, axis=1))(p_cnn)
+max_p_lstm = Lambda(lambda x: K.max(x, axis=1))(p_lstm)
+mean_p_lstm = Lambda(lambda x: K.mean(x, axis=1))(p_lstm)
+max_p_tfidf = Lambda(lambda x: K.max(x, axis=1))(input_p_tfidf)
+mean_p_tfidf = Lambda(lambda x: K.mean(x, axis=1))(input_p_tfidf)
 
 output = concatenate([mean_cnn_body,
                       tf.expand_dims(max_p_cnn, 1), tf.expand_dims(mean_p_cnn, 1),
