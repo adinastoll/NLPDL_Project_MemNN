@@ -9,7 +9,7 @@ from keras.initializers import Constant
 from keras import backend as K
 import numpy as np
 
-from dataproc_utils import *
+from dataproc_utils import load_wordvecs, load_proc_data, make_word_freq_V, word2idx, vocab_vectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 import tensorflow as tf
@@ -95,8 +95,6 @@ embedding_claim = Embedding(vocab_size + 1,
 # initialize placeholders and embed pre-trained word vectors
 input_body = Input(shape=(n_pars, body_size,), dtype='int32')  # change input shape
 input_claim = Input(shape=(claim_size,), dtype='int32')
-# const_p_tfidf = K.constant(train_p_tfidf, dtype='float32')  # convert into variable
-# input_p_tfidf = Input(tensor=const_p_tfidf)
 input_p_tfidf = Input(shape=(n_pars,), dtype='float32')
 
 print('input body', input_body.shape)     # (?, 9, 15)
@@ -110,13 +108,15 @@ print('embedded body', embedded_body.shape)   # (?, 9, 15, 25)
 print('embedded claim', embedded_claim.shape)  # (?, 15, 25)
 
 # train two 1D convnets with maxpooling (should be time distributed with maxout layer (??))
-cnn_body = TimeDistributed(Conv1D(100, 5, padding='same', activation='relu'))(embedded_body)
-#cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=5, axis=-1))(cnn_body) ## ???
-#cnn_body = TimeDistributed(MaxPooling1D(5, padding='same'))(cnn_body)  ## should be maxout
+cnn_body = TimeDistributed(Conv1D(100, 5, padding='valid', activation='relu'))(embedded_body)
+cnn_body = K.max(cnn_body, axis=-1, keepdims=False)  # this should be maxout
+#cnn_body = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_body) ## does not work for some reason!!?
 # what is the output of the maxout layer???
 
-cnn_claim = Conv1D(100, 5, padding='same', activation='relu')(embedded_claim)
-# cnn_claim = MaxPooling1D(5, padding='same')(cnn_claim)
+cnn_claim = Conv1D(100, 5, padding='valid', activation='relu')(embedded_claim)
+cnn_claim = K.max(cnn_claim, axis=-1, keepdims=False)  # this should be maxout
+#cnn_claim = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_claim) ## does not work
+
 
 print('cnn_body shape', cnn_body.shape)  # (?, 9, 3, 100)
 print('cnn_claim shape', cnn_claim.shape)  # (?, 3, 100)
@@ -144,16 +144,16 @@ p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
 print('p_lstm', p_lstm.shape)  # (samples, 9)
 
 ### cnn_body = cnn_body * p_lstm (multiply??)
-cnn_body = Reshape((n_pars, body_size*100))(cnn_body)
+#cnn_body = Reshape((n_pars, body_size*100))(cnn_body)
 cnn_body = multiply([cnn_body, tf.expand_dims(p_lstm, 2)])  # (multiply??)
-cnn_body = Reshape((n_pars, body_size, 100))(cnn_body)
+#cnn_body = Reshape((n_pars, body_size, 100))(cnn_body)
 #cnn_claim = Reshape((300,))(cnn_claim)
 print('cnn_body * p_lstm', cnn_body.shape)
 print('cnn_claim', cnn_claim.shape)
 
 ## p_cnn = cnn_claim.T x M' x cnn_body[j]  a.k.a. wtf is M'?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
-p_cnn = dot([cnn_body, cnn_claim], axes=(3, 2), normalize=True)
+p_cnn = dot([cnn_body, cnn_claim], axes=(2, 1), normalize=True)
 p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, body_size, claim_size)
 print('p_cnn', p_cnn.shape)
 
