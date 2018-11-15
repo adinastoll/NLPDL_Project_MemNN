@@ -136,7 +136,7 @@ print('lstm_claim', lstm_claim.shape)
 ## p_lstm = lstm_claim.T x M x lstm_body[j]  a.k.a. wtf is M?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_lstm = dot([lstm_body, lstm_claim], axes=(2, 1), normalize=True)
-p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
+#p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
 
 print('p_lstm', p_lstm.shape)  # (samples, 9)
 
@@ -148,7 +148,7 @@ print('cnn_claim', cnn_claim.shape)
 ## p_cnn = cnn_claim.T x M' x cnn_body[j]  a.k.a. wtf is M'?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_cnn = dot([cnn_body, cnn_claim], axes=(2, 1), normalize=True)
-p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, n_pars)
+#p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, n_pars)
 print('p_cnn', p_cnn.shape)
 
 
@@ -164,12 +164,12 @@ mean_p_lstm = K.mean(p_lstm, axis=1)
 max_p_tfidf = K.max(input_p_tfidf, axis=1)
 mean_p_tfidf = K.mean(input_p_tfidf, axis=1)
 
-output = [ mean_cnn_body,
-          [max_p_cnn, mean_p_cnn],
-          [max_p_lstm, mean_p_lstm],
-          [max_p_tfidf, mean_p_tfidf] ]# ???
+output = concatenate([mean_cnn_body,
+                      tf.expand_dims(max_p_cnn, 1), tf.expand_dims(mean_p_cnn, 1),
+                      tf.expand_dims(max_p_lstm, 1), tf.expand_dims(mean_p_lstm, 1),
+                      tf.expand_dims(max_p_tfidf, 1), tf.expand_dims(mean_p_tfidf, 1)]) # ???
 
-#print('output', output.shape)
+print('output', output.shape)
 
 response = concatenate([output, lstm_claim, cnn_claim])
 print('response layer:', response.shape)
