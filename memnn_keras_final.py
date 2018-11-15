@@ -117,11 +117,9 @@ cnn_claim = Conv1D(100, 5, padding='valid', activation='relu')(embedded_claim)
 cnn_claim = K.max(cnn_claim, axis=-1, keepdims=False)  # this should be maxout
 #cnn_claim = Lambda(lambda x: tf.contrib.layers.maxout(x, num_units=1))(cnn_claim) ## does not work
 
+print('cnn_body shape', cnn_body.shape)  # (?, 9, 11)
+print('cnn_claim shape', cnn_claim.shape)  # (?, 11)
 
-print('cnn_body shape', cnn_body.shape)  # (?, 9, 3, 100)
-print('cnn_claim shape', cnn_claim.shape)  # (?, 3, 100)
-
-#cnn_body = Reshape((n_pars, 300))(cnn_body)
 
 # train two lstms
 lstm_body = TimeDistributed(LSTM(100))(embedded_body)
@@ -131,33 +129,30 @@ print('lstm body', lstm_body.shape) # (?, 9, 100)
 print('lstm claim', lstm_claim.shape) # (?, 100)
 
 lstm_body = multiply([lstm_body, tf.expand_dims(input_p_tfidf, 2)])  # (multiply??)
-### tensor shapes: (len(claims/bodies), n_pars (9), 100) * (len(claims/bodies), n_pars, 1)
-print('lstm_body * p_tfidf', lstm_body.shape)  # (39977, 9, 100)
+### tensor shapes: (samples, n_pars, 100) * (samples, n_pars, 1)
+print('lstm_body * p_tfidf', lstm_body.shape)  # (samples, 9, 100)
 print('lstm_claim', lstm_claim.shape)
 
 ## p_lstm = lstm_claim.T x M x lstm_body[j]  a.k.a. wtf is M?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_lstm = dot([lstm_body, lstm_claim], axes=(2, 1), normalize=True)
 p_lstm = Activation('softmax')(p_lstm)  # shape: (samples, n_pars)
-#p_lstm = Reshape((n_pars, 1))(p_lstm)   # shape: (samples, n_pars, 1)
 
 print('p_lstm', p_lstm.shape)  # (samples, 9)
 
 ### cnn_body = cnn_body * p_lstm (multiply??)
-#cnn_body = Reshape((n_pars, body_size*100))(cnn_body)
 cnn_body = multiply([cnn_body, tf.expand_dims(p_lstm, 2)])  # (multiply??)
-#cnn_body = Reshape((n_pars, body_size, 100))(cnn_body)
-#cnn_claim = Reshape((300,))(cnn_claim)
 print('cnn_body * p_lstm', cnn_body.shape)
 print('cnn_claim', cnn_claim.shape)
 
 ## p_cnn = cnn_claim.T x M' x cnn_body[j]  a.k.a. wtf is M'?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
 p_cnn = dot([cnn_body, cnn_claim], axes=(2, 1), normalize=True)
-p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, body_size, claim_size)
+p_cnn = Activation('softmax')(p_cnn)  # shape: (samples, n_pars)
 print('p_cnn', p_cnn.shape)
 
 
+# no clue whats going from here onward
 ## o = [mean(cnn_body); [max(p_cnn); mean(p_cnn)]; [max(p_lstm); mean(p_lstm)]; [max(p_tfidf); mean(p_tfidf)]]
 mean_cnn_body = K.mean(cnn_body, axis=2)
 print('mean cnn body', mean_cnn_body.shape)
