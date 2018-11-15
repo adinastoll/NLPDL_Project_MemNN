@@ -4,7 +4,7 @@ from keras.models import Sequential, Model
 from keras.layers.embeddings import Embedding
 from keras.layers import Input, Activation, Dense, Permute, Reshape, Dropout
 from keras.layers import add, dot, multiply, concatenate
-from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda, MaxPooling1D, GlobalMaxPooling1D
+from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda
 from keras.initializers import Constant
 from keras import backend as K
 import numpy as np
@@ -128,10 +128,14 @@ lstm_claim = (LSTM(100))(embedded_claim)
 print('lstm body', lstm_body.shape) # (?, 9, 100)
 print('lstm claim', lstm_claim.shape) # (?, 100)
 
-lstm_body = multiply([lstm_body, tf.expand_dims(input_p_tfidf, 2)])  # (multiply??)
-### tensor shapes: (samples, n_pars, 100) * (samples, n_pars, 1)
+
+# reshape tfidf sim matrix layer from (?, 9) into (?, 9, 1)
+reshaped_p_tfidf = Reshape((n_pars, 1))(input_p_tfidf)
+lstm_body = multiply([lstm_body, reshaped_p_tfidf])
+
+### tensor shapes: (samples, n_pars, 100) * (samples, n_pars, 1) => (?, 9, 100)
 print('lstm_body * p_tfidf', lstm_body.shape)  # (samples, 9, 100)
-print('lstm_claim', lstm_claim.shape)
+print('lstm_claim', lstm_claim.shape)  # (samples, 100)
 
 ## p_lstm = lstm_claim.T x M x lstm_body[j]  a.k.a. wtf is M?
 ## if normalize=True, then the output of the dot product is the cosine similarity between the two samples
@@ -141,7 +145,9 @@ p_lstm = dot([lstm_body, lstm_claim], axes=(2, 1), normalize=True)
 print('p_lstm', p_lstm.shape)  # (samples, 9)
 
 ### cnn_body = cnn_body * p_lstm (multiply??)
-cnn_body = multiply([cnn_body, tf.expand_dims(p_lstm, 2)])  # (multiply??)
+# reshape sim matrix layer from (?, 9) into (?, 9, 1)
+p_lstm = Reshape((n_pars, 1))(p_lstm)
+cnn_body = multiply([cnn_body, p_lstm])  # (multiply??)
 print('cnn_body * p_lstm', cnn_body.shape)
 print('cnn_claim', cnn_claim.shape)
 
@@ -157,17 +163,22 @@ print('p_cnn', p_cnn.shape)
 mean_cnn_body = Lambda(lambda x: K.mean(x, axis=2))(cnn_body)
 print('mean cnn body', mean_cnn_body.shape)
 
+# taking mean and max similarities
 max_p_cnn = Lambda(lambda x: K.max(x, axis=1))(p_cnn)
 mean_p_cnn = Lambda(lambda x: K.mean(x, axis=1))(p_cnn)
 max_p_lstm = Lambda(lambda x: K.max(x, axis=1))(p_lstm)
 mean_p_lstm = Lambda(lambda x: K.mean(x, axis=1))(p_lstm)
-max_p_tfidf = Lambda(lambda x: K.max(x, axis=1))(input_p_tfidf)
-mean_p_tfidf = Lambda(lambda x: K.mean(x, axis=1))(input_p_tfidf)
+max_p_tfidf = Lambda(lambda x: K.max(x, axis=1))(reshaped_p_tfidf)
+mean_p_tfidf = Lambda(lambda x: K.mean(x, axis=1))(reshaped_p_tfidf)
+
+# reshaping some layers
+max_p_cnn = Reshape((1,))(max_p_cnn)
+mean_p_cnn = Reshape((1,))(mean_p_cnn)
 
 output = concatenate([mean_cnn_body,
-                      tf.expand_dims(max_p_cnn, 1), tf.expand_dims(mean_p_cnn, 1),
-                      tf.expand_dims(max_p_lstm, 1), tf.expand_dims(mean_p_lstm, 1),
-                      tf.expand_dims(max_p_tfidf, 1), tf.expand_dims(mean_p_tfidf, 1)]) # ???
+                      max_p_cnn, mean_p_cnn,
+                      max_p_lstm, mean_p_lstm,
+                      max_p_tfidf, mean_p_tfidf]) # ???
 
 print('output', output.shape)
 
