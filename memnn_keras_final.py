@@ -1,9 +1,9 @@
 from __future__ import print_function
 
-from keras.models import Sequential, Model
+from keras.models import Model
 from keras.layers.embeddings import Embedding
-from keras.layers import Input, Activation, Dense, Permute, Reshape, Dropout
-from keras.layers import add, dot, multiply, concatenate
+from keras.layers import Input, Dense, Reshape, Dropout
+from keras.layers import dot, multiply, concatenate
 from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda
 from keras.initializers import Constant
 from keras import backend as K
@@ -12,21 +12,20 @@ import numpy as np
 from dataproc_utils import load_wordvecs, load_proc_data, make_word_freq_V, word2idx, vocab_vectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-import tensorflow as tf
 
 
-
+# global variables
 batch_size = 64
-epochs = 25
+epochs = 100
 random_state = 42
 n_pars = 9 # max number of paragraphs from each document
 par_size = 15  # max paragraph length (num of words in each paragraph)
 claim_size = 15  # max num of words in each claim
-embedding_dim = 25  # should be 100
+embedding_dim = 100  # size of the pre-trained glove embeddings
 output_size = 4  # size of the output vector, corresponds to the number of classes
 
 # open saved wordvecs from file
-w2v = load_wordvecs('twitter_glo_vecs\\train_wordvecs25d.txt')
+w2v = load_wordvecs('twitter_glo_vecs\\train_wordvecs100d.txt')
 print(len(w2v), 'pretrained embeddings')
 
 # load data and labels

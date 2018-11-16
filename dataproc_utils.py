@@ -272,7 +272,7 @@ def extract_wordvecs(filename, V_dict):
             line = line.strip().split()
             word = line[0]
             if word in V_dict:
-                vec_dict[word] = [float(x) for x in line[1:]]
+                vec_dict[word] = line[1:]
     return vec_dict
     
     
