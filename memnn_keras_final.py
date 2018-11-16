@@ -26,7 +26,7 @@ embedding_dim = 25  # should be 100
 output_size = 4  # size of the output vector, corresponds to the number of classes
 
 # open saved wordvecs from file
-w2v = load_wordvecs('twitter_glo_vecs\\wordvecs25d.txt')
+w2v = load_wordvecs('twitter_glo_vecs\\train_wordvecs25d.txt')
 print(len(w2v), 'pretrained embeddings')
 
 # load data and labels
