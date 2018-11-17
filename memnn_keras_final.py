@@ -15,9 +15,9 @@ from sklearn.metrics import accuracy_score
 
 
 # global variables
-batch_size = 64
+batch_size = 512
 epochs = 100
-random_state = 42
+random_state = 43
 n_pars = 9 # max number of paragraphs from each document
 par_size = 15  # max paragraph length (num of words in each paragraph)
 claim_size = 15  # max num of words in each claim
@@ -55,7 +55,7 @@ train_data, val_data, train_p_tfidf, val_p_tfidf, train_labels, val_labels = tra
 
 
 # create a vocabulary dict from train data (we exclude rare words, which appear only once)
-word2freq = make_word_freq_V(train_data, fmin=2)
+word2freq = make_word_freq_V(train_data, fmin=1)
 word2index = word2idx(word2freq, pretrained=w2v)
 vocab_size = len(word2index)
 print('Vocab size:', vocab_size, 'unique words in the train set which have glove embeddings')

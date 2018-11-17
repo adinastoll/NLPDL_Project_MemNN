@@ -401,7 +401,7 @@ def label2onehot(labels):
     return onehot_labels
 
 
-def random_sampler(X_body, X_claim, y, type='under', random_state=42):
+def random_sampler(X_body, X_claim, X_p_tfidf, y, type='under', random_state=42):
 
     if type == 'under':
         rs = RandomUnderSampler(random_state=random_state)
@@ -415,20 +415,22 @@ def random_sampler(X_body, X_claim, y, type='under', random_state=42):
         n, m, s = body_shape
         X_body = X_body.reshape((n, -1))
 
-        X = np.hstack((X_body, X_claim))
+        X = np.hstack((X_body, X_claim, X_p_tfidf))
         X_resampled, y_resampled = rs.fit_resample(X, y)
 
-        X_body_resampled = X_resampled[:, :(m * s)].reshape((n, m, -1))
-        X_claim_resampled = X_resampled[:, (m * s):]
+        X_body_resampled = X_resampled[:, :(m * s)].reshape((-1, m, s))
+        X_claim_resampled = X_resampled[:, (m * s): -m]
+        X_p_tfidf_resampled = X_resampled[:, -m:]
 
     else:
         n, m = body_shape
 
-        X = np.hstack((X_body, X_claim))
+        X = np.hstack((X_body, X_claim, X_p_tfidf))
         X_resampled, y_resampled = rs.fit_resample(X, y)
 
         X_body_resampled = X_resampled[:, :m]
-        X_claim_resampled = X_resampled[:, m:]
+        X_claim_resampled = X_resampled[:, m:-m]
+        X_p_tfidf_resampled = X_resampled[:, -m:]
 
-    return X_body_resampled, X_claim_resampled, y_resampled
+    return X_body_resampled, X_claim_resampled, X_p_tfidf_resampled, y_resampled
 
