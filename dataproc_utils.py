@@ -179,6 +179,22 @@ def load_file(filename):
     return lines
 
 
+def read_proc_data(all_bodies, all_claims, split_pars=True):
+    b2p = parse_proc_bodies_dict(all_bodies, split_pars=split_pars)
+
+    data = []
+    for line in all_claims:
+        line = line.strip().split()
+        bid = int(line[0])
+        claim = line[1:-1]
+        label = int(line[-1])
+
+        if bid in b2p:
+            data.append((b2p[bid], claim, label))
+
+    return data
+
+
 def load_proc_data(bodies_filename, claims_filename, split_pars=True):
     all_bodies = load_file(bodies_filename)
     all_claims = load_file(claims_filename)
@@ -387,7 +403,6 @@ def word_vectorizer(data, w2i, max_body_len=30, max_claim_len=12):
                 s[i, k] = w2i['<unknown>']
 
     return d, s
-
 
 
 def label2onehot(labels):
