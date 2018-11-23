@@ -179,6 +179,22 @@ def load_file(filename):
     return lines
 
 
+def read_proc_data(all_bodies, all_claims, split_pars=True):
+    b2p = parse_proc_bodies_dict(all_bodies, split_pars=split_pars)
+
+    data = []
+    for line in all_claims:
+        line = line.strip().split()
+        bid = int(line[0])
+        claim = line[1:-1]
+        label = int(line[-1])
+
+        if bid in b2p:
+            data.append((b2p[bid], claim, label))
+
+    return data
+
+
 def load_proc_data(bodies_filename, claims_filename, split_pars=True):
     all_bodies = load_file(bodies_filename)
     all_claims = load_file(claims_filename)
@@ -272,7 +288,7 @@ def extract_wordvecs(filename, V_dict):
             line = line.strip().split()
             word = line[0]
             if word in V_dict:
-                vec_dict[word] = [float(x) for x in line[1:]]
+                vec_dict[word] = line[1:]
     return vec_dict
     
     
@@ -389,7 +405,6 @@ def word_vectorizer(data, w2i, max_body_len=30, max_claim_len=12):
     return d, s
 
 
-
 def label2onehot(labels):
     n = len(labels)
     onehot_labels = np.zeros((n, 4), dtype=np.int32)
@@ -401,7 +416,7 @@ def label2onehot(labels):
     return onehot_labels
 
 
-def random_sampler(X_body, X_claim, y, type='under', random_state=42):
+def random_sampler(X_body, X_claim, X_p_tfidf, y, type='under', random_state=42):
 
     if type == 'under':
         rs = RandomUnderSampler(random_state=random_state)
@@ -415,20 +430,22 @@ def random_sampler(X_body, X_claim, y, type='under', random_state=42):
         n, m, s = body_shape
         X_body = X_body.reshape((n, -1))
 
-        X = np.hstack((X_body, X_claim))
+        X = np.hstack((X_body, X_claim, X_p_tfidf))
         X_resampled, y_resampled = rs.fit_resample(X, y)
 
-        X_body_resampled = X_resampled[:, :(m * s)].reshape((n, m, -1))
-        X_claim_resampled = X_resampled[:, (m * s):]
+        X_body_resampled = X_resampled[:, :(m * s)].reshape((-1, m, s))
+        X_claim_resampled = X_resampled[:, (m * s): -m]
+        X_p_tfidf_resampled = X_resampled[:, -m:]
 
     else:
         n, m = body_shape
 
-        X = np.hstack((X_body, X_claim))
+        X = np.hstack((X_body, X_claim, X_p_tfidf))
         X_resampled, y_resampled = rs.fit_resample(X, y)
 
         X_body_resampled = X_resampled[:, :m]
-        X_claim_resampled = X_resampled[:, m:]
+        X_claim_resampled = X_resampled[:, m:-m]
+        X_p_tfidf_resampled = X_resampled[:, -m:]
 
-    return X_body_resampled, X_claim_resampled, y_resampled
+    return X_body_resampled, X_claim_resampled, X_p_tfidf_resampled, y_resampled
 

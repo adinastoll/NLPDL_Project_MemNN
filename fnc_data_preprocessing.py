@@ -5,9 +5,8 @@ import pandas as pd
 from dataproc_utils import *
 
 
-
 # load and split document bodies into paragraphs
-bodies = pd.read_csv('data/train_bodies.csv')   
+bodies = pd.read_csv('data/train_bodies.csv')
 pars = split_paraphs(bodies)
 
 # load and convert stances into a list of claims
@@ -62,22 +61,21 @@ trimmed_bodies = trim_bodies(proc_pars)
 
 # construct vocabulary
 V = make_V(trimmed_bodies, proc_claims)
-print(len(V))
+print('Total unique words in the train data:', len(V))
 
-# create a new dictionary where all words with frequency 1
-# are converted to <unknown> token
-V_freq = remove_rare(V, fmin=2)
-print(len(V_freq))
-        
-        
-# remove old placeholder keys and insert new ones that have a corresponding glove vec        
-new = ['<url>', '<user>', '<hashtag>']   
+# remove old placeholder keys and insert new ones that have a corresponding glove vec
+new = ['<url>', '<user>', '<hashtag>']
 old = ['urlzz', 'userzz', 'hashtagzz']
+V = remove_placeholder_keys(V, old, new)
 
-V_freq = remove_placeholder_keys(V_freq, old, new)
-        
+# create a new dictionary where all words with frequency less than fmin
+# are converted to <unknown> token
+V_freq = remove_rare(V, fmin=1)
+print('Unique words that appear more than once', len(V_freq))
+
 # extract glove vecs that correspond to the words in our vocabulary
-w2v = extract_wordvecs('glove_twitter/glove.twitter.27B.25d.txt', V_freq)
+w2v = extract_wordvecs('glove.twitter.27B\\glove.twitter.27B.100d.txt', V_freq)
+print('Unique words that have a pre-trained vector', len(w2v))
 
 # uncomment to save the extracted word vecs to a file
-# write_wordvecs_tofile('wordvecs25.txt', w2v)
+# write_wordvecs_tofile('twitter_glo_vecs\\train_wordvecs100d.txt', w2v)

@@ -1,39 +1,47 @@
 from __future__ import print_function
 
-from keras.models import Sequential, Model
+import numpy as np
+from sklearn.model_selection import train_test_split
+from dataproc_utils import load_wordvecs, load_file, read_proc_data
+from dataproc_utils import make_word_freq_V, word2idx
+from dataproc_utils import vocab_vectorizer, random_sampler
+from tfidf_cosine_similarity import tfidf_fit_transform
+
+from keras.models import Model
 from keras.layers.embeddings import Embedding
-from keras.layers import Input, Activation, Dense, Permute, Reshape, Dropout
-from keras.layers import add, dot, multiply, concatenate
+from keras.layers import Input, Dense, Reshape, Dropout
+from keras.layers import dot, multiply, concatenate
 from keras.layers import LSTM, Conv1D, TimeDistributed, Lambda
 from keras.initializers import Constant
 from keras import backend as K
-import numpy as np
-
-from dataproc_utils import load_wordvecs, load_proc_data, make_word_freq_V, word2idx, vocab_vectorizer
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
-import tensorflow as tf
+from keras.callbacks import ModelCheckpoint
 
 
-
+# global variables
 batch_size = 64
-epochs = 25
+epochs = 100
 random_state = 42
 n_pars = 9 # max number of paragraphs from each document
 par_size = 15  # max paragraph length (num of words in each paragraph)
 claim_size = 15  # max num of words in each claim
-embedding_dim = 25  # should be 100
+embedding_dim = 100  # size of the pre-trained glove embeddings
 output_size = 4  # size of the output vector, corresponds to the number of classes
 
 # open saved wordvecs from file
-w2v = load_wordvecs('twitter_glo_vecs\\train_wordvecs25d.txt')
+w2v = load_wordvecs('twitter_glo_vecs\\train_wordvecs100d.txt')
 print(len(w2v), 'pretrained embeddings')
 
 # load data and labels
-data = load_proc_data('processed_data\\train_bodies.txt', 'processed_data\\train_claims.txt', split_pars=True)
-labels = [label for body, claim, label in data]
-y = np.array(labels)
+bodies_train = load_file('processed_data\\train_bodies.txt')
+claims_train = load_file('processed_data\\train_claims.txt')
+bodies_test = load_file('processed_data\\test_bodies.txt')
+claims_test = load_file('processed_data\\test_claims.txt')
 
+data_train = read_proc_data(bodies_train, claims_train, split_pars=True)
+y_train = np.array([label for _, _, label in data_train])
+
+data_test = read_proc_data(bodies_test, claims_test, split_pars=True)
+y_test = np.array([label for _, _, label in data_test])
 
 # initialize tfidf tokenizer
 # fit on concatenated list of bodies and claims
@@ -43,20 +51,29 @@ y = np.array(labels)
 # tfidf_claim shape (len(claims), vocab size)
 # p_tfidf output shape: (len(claims), n_pars)
 
-# load pre-computed p_tfidf similarity matrix for train data
-p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
-print('Shape of similarity matrix train p_tfidf:', p_tfidf.shape)
 
 # train/validation split
-train_data, val_data, train_p_tfidf, val_p_tfidf, train_labels, val_labels = train_test_split(data, p_tfidf, y,
-                                                                                              test_size=.2,
-                                                                                              random_state=random_state)
+train_data, val_data, train_labels, val_labels = train_test_split(data_train, y_train,
+                                                                  test_size=.2,
+                                                                  random_state=random_state)
+
 #print('First input tuple (body, claim, stance):\n', train_data[0])
-#print('First input p_tfidf:\n', train_p_tfidf[0])
+
+
+
+# compute cos similarities after splitting into train/val or load the precomputed ones
+# you have to recompute the similarities each time you change the random state of train/val split
+# train_p_tfidf, val_p_tfidf, test_p_tfidf = tfidf_fit_transform(train_data, val_data, data_test)
+
+# load pre-computed p_tfidf similarity matrix for train data
+train_p_tfidf = np.loadtxt('processed_data\\p_tfidf_train.txt', dtype=np.float32)
+val_p_tfidf = np.loadtxt('processed_data\\p_tfidf_val.txt', dtype=np.float32)
+test_p_tfidf = np.loadtxt('processed_data\\p_tfidf_test.txt', dtype=np.float32)
+print('Shape of similarity matrix train p_tfidf:', train_p_tfidf.shape)
 
 
 # create a vocabulary dict from train data (we exclude rare words, which appear only once)
-word2freq = make_word_freq_V(train_data, fmin=2)
+word2freq = make_word_freq_V(train_data, fmin=1)
 word2index = word2idx(word2freq, pretrained=w2v)
 vocab_size = len(word2index)
 print('Vocab size:', vocab_size, 'unique words in the train set which have glove embeddings')
@@ -65,7 +82,14 @@ print('Vocab size:', vocab_size, 'unique words in the train set which have glove
 # for new words in test set that don't appear in train set, use index of <unknown>
 train_body, train_claim = vocab_vectorizer(train_data, word2index, max_par_len=par_size, max_claim_len=claim_size)
 val_body, val_claim = vocab_vectorizer(val_data, word2index, max_par_len=par_size, max_claim_len=claim_size)
+test_body, test_claim = vocab_vectorizer(data_test, word2index, max_par_len=par_size, max_claim_len=claim_size)
 
+
+# perform random under/over sampling to prevent class imbalance
+train_body, train_claim, train_p_tfidf, train_labels = random_sampler(train_body,
+                                                                      train_claim,
+                                                                      train_p_tfidf,
+                                                                      train_labels, type='over')
 
 # prepare embedding matrix
 embedding_matrix = np.zeros((vocab_size + 1, embedding_dim))
@@ -178,7 +202,7 @@ print('response layer:', response.shape)   # (?, 126)
 
 # home stretch
 stance = Dense(300, activation='relu')(response)
-stance = Dropout(0.3)(stance)
+stance = Dropout(0.7)(stance)
 preds = Dense(output_size, activation='softmax')(stance)
 
 
@@ -188,13 +212,30 @@ model.compile(optimizer='rmsprop',
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
+# print model summary
+print(model.summary())
+
+
+checkpointer = ModelCheckpoint(filepath='best_weights\\memnn.weights.best.hdf5',
+                               monitor='val_acc',
+                               verbose=1,
+                               save_best_only=True)
 
 # train
 model.fit([train_body, train_claim, train_p_tfidf], train_labels,
           batch_size=batch_size,
           epochs=epochs,
-          validation_data=([val_body, val_claim, val_p_tfidf], val_labels))
+          validation_data=([val_body, val_claim, val_p_tfidf], val_labels),
+          callbacks=[checkpointer])
 
-# print model summary
-print(model.summary())
+
+# # Load the weights with the best validation accuracy
+# model.load_weights('best_weights\\memnn.weights.best.hdf5')
+#
+# # Evaluate the model on test set
+# score = model.evaluate([test_body, test_claim, test_p_tfidf], y_test,
+#                        batch_size=batch_size)
+#
+# print('Test loss:', score[0])
+# print('Test accuracy:', score[1])
 
