@@ -5,8 +5,7 @@
 2. a textual statement containing a claim (article headline)
 
 **Output:**  
-1. the stance of a document with respect to the corresponding claim
-- *agree*, *disagree*, *discuss*, *unrelated*
+1. the stance of a document with respect to the corresponding claim (*agree*, *disagree*, *discuss*, *unrelated*)
 
 **Inference Outputs:**  
 1. *k* most similar paragraphs with their similarity scores  
