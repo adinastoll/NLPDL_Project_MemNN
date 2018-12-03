@@ -4,11 +4,11 @@
 1. a document (article body) segmented into paragraphs (potential pieces of evidence)  
 2. a textual statement containing a claim (article headline)
 
-**Output:**  
+**Output:** 
 1. the stance of a document with respect to the corresponding claim
-  - *agree*, *disagree*, *discuss*, *unrelated*
+- *agree*, *disagree*, *discuss*, *unrelated*
 
-**Inference Outputs:**  
+**Inference Outputs:** 
 2. *k* most similar paragraphs with their similarity scores  
 3. *k* most similar snippets with their similarity scores
 
@@ -51,9 +51,9 @@ cnn body x cnn claim ---------> p cnn (n_samples, 9)    # similarity matrix
 #### 4. Output Memory Representation
 ```
 concatenate [ mean(cnn body),
-			  max(p cnn), mean(p cnn),
-			  max(p lstm), mean(p lstm),
-			  max(p tfidf), mean(p tfidf) ] --> output
+	      max(p cnn), mean(p cnn),
+	      max(p lstm), mean(p lstm),
+	      max(p tfidf), mean(p tfidf) ] --> output
 ```
 
 #### 5. Final Response (Class Prediction)
