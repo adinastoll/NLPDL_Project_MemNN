@@ -1,16 +1,16 @@
 ## Memory Network Architecture
 
-**Input:** 
+**Input:**  
 1. a document (article body) segmented into paragraphs (potential pieces of evidence)  
 2. a textual statement containing a claim (article headline)
 
-**Output:** 
+**Output:**  
 1. the stance of a document with respect to the corresponding claim
 - *agree*, *disagree*, *discuss*, *unrelated*
 
-**Inference Outputs:** 
-2. *k* most similar paragraphs with their similarity scores  
-3. *k* most similar snippets with their similarity scores
+**Inference Outputs:**  
+1. *k* most similar paragraphs with their similarity scores  
+2. *k* most similar snippets with their similarity scores
 
 -----------------------------------------
 
