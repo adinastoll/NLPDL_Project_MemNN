@@ -33,8 +33,8 @@ dense body ---> TimeDistributed (LSTM, 100 units) -----------> lstm body (n_samp
 dense body ---> TimeDistributed (CNN, 100 filters, size 5) --> cnn body  (n_samples, 9, 11, 100)
 cnn body -----> MaxOut --------------------------------------> cnn body  (n_samples, 9, 11)
 
-dense claim --> TimeDistributed (LSTM, 100 units) -----------> lstm claim (n_samples, 100)
-dense claim --> TimeDistributed (CNN, 100 filters, size 5) --> cnn claim  (n_samples, 11, 100)
+dense claim --> LSTM (100 units) -----------> lstm claim (n_samples, 100)
+dense claim --> CNN (100 filters, size 5) --> cnn claim  (n_samples, 11, 100)
 cnn claim ----> MaxOut --------------------------------------> cnn claim  (n_samples, 11)
 ```
 
