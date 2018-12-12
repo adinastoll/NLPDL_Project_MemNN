@@ -1,10 +1,14 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 import nltk
 import re
 import string
+import itertools
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
+from sklearn.metrics import confusion_matrix
+
 
 
 def split_paraphs(df):
@@ -419,7 +423,7 @@ def label2onehot(labels):
 def random_sampler(X_body, X_claim, X_p_tfidf, y, type='under', random_state=42):
 
     if type == 'under':
-        rs = RandomUnderSampler(random_state=random_state)
+        rs = RandomUnderSampler(sampling_strategy='majority', random_state=random_state)
     elif type == 'over':
         rs = RandomOverSampler(random_state=random_state)
     else:
@@ -448,4 +452,60 @@ def random_sampler(X_body, X_claim, X_p_tfidf, y, type='under', random_state=42)
         X_p_tfidf_resampled = X_resampled[:, -m:]
 
     return X_body_resampled, X_claim_resampled, X_p_tfidf_resampled, y_resampled
+
+
+def plot_confusion_matrix(cm, classes,
+                          normalize=True,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+#     print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.tight_layout()
+    return plt.gcf()
+
+
+def get_score(true_label, predicted_label):
+    # 0 - unrelated, #1 - discuss, #2 - agree, #3 - disagree
+
+    unrelated_class = [0]
+    related_class = [1, 2, 3]
+
+    if true_label in unrelated_class and predicted_label in unrelated_class:
+        return 0.25
+    elif true_label in related_class and predicted_label in related_class:
+        return 0.25 + (0.75 if predicted_label == true_label else 0)
+    return 0
+
+
+def compute_weighted_accuracy(true_labels, predicted_labels):
+    scores = [get_score(true, pred) for true, pred in list(zip(true_labels, predicted_labels))]
+    best_result = [get_score(true, pred) for true, pred in list(zip(true_labels, true_labels))]
+    weighted_accuracy = np.sum(scores) / np.sum(best_result)
+    return weighted_accuracy
 
